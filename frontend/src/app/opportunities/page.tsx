@@ -1,24 +1,15 @@
-import { supabase } from '@/lib/supabase'
 import { getOpportunityTypeLabel, getOpportunityTypeColor, formatDate, formatScore } from '@/lib/utils'
 import { Target, Filter } from 'lucide-react'
 
-async function getOpportunities(searchParams: { type?: string }) {
+async function getOpportunities(type: string): Promise<any[]> {
   try {
-    let query = supabase
-      .from('opportunities')
-      .select('*, keywords(keyword, category), regions(region_code, region_name)')
-      .eq('status', 'active')
-      .order('score', { ascending: false })
-      .limit(50)
-
-    if (searchParams.type && searchParams.type !== 'all') {
-      query = query.eq('opportunity_type', searchParams.type)
-    }
-
-    const { data } = await query
-    return data || []
-  } catch (error) {
-    console.error('获取机会数据失败:', error)
+    const res = await fetch(
+      `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/opportunities?type=${type}`,
+      { cache: 'no-store' }
+    )
+    if (!res.ok) throw new Error('Failed to fetch')
+    return await res.json()
+  } catch {
     return []
   }
 }
@@ -36,7 +27,8 @@ export default async function OpportunitiesPage({
 }: {
   searchParams: { type?: string }
 }) {
-  const opportunities = await getOpportunities(searchParams)
+  const type = searchParams.type || 'all'
+  const opportunities = await getOpportunities(type)
 
   return (
     <div className="space-y-6">
@@ -47,31 +39,29 @@ export default async function OpportunitiesPage({
         </p>
       </div>
 
-      {/* 筛选器 */}
       <div className="flex items-center gap-2 flex-wrap">
         <Filter className="w-4 h-4 text-zinc-500" />
-        {filterTypes.map((type) => {
-          const isActive = (searchParams.type || 'all') === type.value
+        {filterTypes.map((t) => {
+          const isActive = type === t.value
           return (
             <a
-              key={type.value}
-              href={type.value === 'all' ? '/opportunities' : `/opportunities?type=${type.value}`}
+              key={t.value}
+              href={t.value === 'all' ? '/opportunities' : `/opportunities?type=${t.value}`}
               className={`px-3 py-1.5 rounded-lg text-sm transition-colors ${
                 isActive
                   ? 'bg-primary text-white'
                   : 'bg-surface border border-border text-zinc-400 hover:text-white hover:border-zinc-600'
               }`}
             >
-              {type.label}
+              {t.label}
             </a>
           )
         })}
       </div>
 
-      {/* 机会列表 */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {opportunities.length > 0 ? (
-          opportunities.map((opp) => (
+          opportunities.map((opp: any) => (
             <div
               key={opp.id}
               className="bg-surface border border-border rounded-xl p-5 hover:border-zinc-600 transition-colors animate-fade-in"
@@ -95,11 +85,11 @@ export default async function OpportunitiesPage({
               <div className="flex items-center gap-4 text-xs">
                 <div className="flex items-center gap-1">
                   <span className="text-zinc-500">关键词:</span>
-                  <span className="text-zinc-300">{opp.keywords?.keyword || 'N/A'}</span>
+                  <span className="text-zinc-300">{opp.keyword || 'N/A'}</span>
                 </div>
                 <div className="flex items-center gap-1">
                   <span className="text-zinc-500">地区:</span>
-                  <span className="text-zinc-300">{opp.regions?.region_name || '全球'}</span>
+                  <span className="text-zinc-300">{opp.region_name || '全球'}</span>
                 </div>
               </div>
 

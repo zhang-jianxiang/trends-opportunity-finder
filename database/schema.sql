@@ -1,6 +1,7 @@
 -- ============================================
 -- Google Trends 数据分析系统 - 数据库表结构
--- 在 Supabase SQL Editor 中执行此文件
+-- 适用于 Neon / 任何标准 PostgreSQL
+-- 在 Neon Console 的 SQL Editor 中执行此文件
 -- ============================================
 
 -- 关键词表
@@ -196,34 +197,3 @@ JOIN keywords k ON o.keyword_id = k.id
 JOIN regions r ON o.region_id = r.id
 WHERE o.status = 'active'
 ORDER BY o.score DESC;
-
--- ============================================
--- RPC 函数：获取关键词趋势历史
--- 用法: SELECT * FROM get_keyword_history('artificial intelligence', 'US', 90);
--- ============================================
-CREATE OR REPLACE FUNCTION get_keyword_history(
-    p_keyword VARCHAR,
-    p_region VARCHAR DEFAULT '',
-    p_days INTEGER DEFAULT 90
-)
-RETURNS TABLE (
-    date DATE,
-    score INTEGER,
-    keyword VARCHAR,
-    region_code VARCHAR
-)
-LANGUAGE sql
-AS $$
-    SELECT
-        t.date,
-        t.score,
-        k.keyword,
-        r.region_code
-    FROM trends_data t
-    JOIN keywords k ON t.keyword_id = k.id
-    JOIN regions r ON t.region_id = r.id
-    WHERE k.keyword = p_keyword
-      AND r.region_code = p_region
-      AND t.date >= CURRENT_DATE - p_days
-    ORDER BY t.date ASC;
-$$;

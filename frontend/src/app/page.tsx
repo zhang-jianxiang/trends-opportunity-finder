@@ -1,73 +1,39 @@
-import { supabase } from '@/lib/supabase'
-import { 
+import {
   getTrendColor, getTrendIcon, getPotentialColor, getPotentialLabel,
   formatScore, getOpportunityTypeLabel, getOpportunityTypeColor, formatDate
 } from '@/lib/utils'
 import { TrendingUp, Target, AlertTriangle, Database, ArrowRight } from 'lucide-react'
 import Link from 'next/link'
 
-async function getDashboardData() {
+async function getDashboardData(): Promise<any> {
   try {
-    // 获取活跃机会
-    const { data: opportunities } = await supabase
-      .from('opportunities')
-      .select('*, keywords(keyword, category), regions(region_code, region_name)')
-      .eq('status', 'active')
-      .order('score', { ascending: false })
-      .limit(5)
-
-    // 获取最新分析结果
-    const { data: analysis } = await supabase
-      .from('trend_analysis')
-      .select('*, keywords(keyword, category), regions(region_code, region_name)')
-      .order('analysis_date', { ascending: false })
-      .order('opportunity_score', { ascending: false })
-      .limit(8)
-
-    // 获取关键词总数
-    const { count: keywordCount } = await supabase
-      .from('keywords')
-      .select('*', { count: 'exact', head: true })
-      .eq('is_active', true)
-
-    // 获取数据总量
-    const { count: dataCount } = await supabase
-      .from('trends_data')
-      .select('*', { count: 'exact', head: true })
-
-    // 获取异常数量
-    const { count: anomalyCount } = await supabase
-      .from('trend_analysis')
-      .select('*', { count: 'exact', head: true })
-      .eq('is_anomaly', true)
-
-    // 获取最近采集日志
-    const { data: logs } = await supabase
-      .from('collection_logs')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .limit(3)
-
-    return { opportunities, analysis, keywordCount, dataCount, anomalyCount, logs }
-  } catch (error) {
-    console.error('获取数据失败:', error)
-    return { opportunities: [], analysis: [], keywordCount: 0, dataCount: 0, anomalyCount: 0, logs: [] }
+    const res = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/dashboard`, {
+      cache: 'no-store'
+    })
+    if (!res.ok) throw new Error('Failed to fetch')
+    return await res.json()
+  } catch {
+    return {
+      stats: { keywordCount: 0, dataCount: 0, anomalyCount: 0, opportunityCount: 0 },
+      opportunities: [],
+      analysis: [],
+      logs: []
+    }
   }
 }
 
 export default async function DashboardPage() {
-  const { opportunities, analysis, keywordCount, dataCount, anomalyCount, logs } = await getDashboardData()
+  const { stats, opportunities, analysis, logs } = await getDashboardData()
 
-  const stats = [
-    { label: '监控关键词', value: keywordCount || 0, icon: Database, color: 'text-primary' },
-    { label: '活跃机会', value: opportunities?.length || 0, icon: Target, color: 'text-success' },
-    { label: '异常趋势', value: anomalyCount || 0, icon: AlertTriangle, color: 'text-warning' },
-    { label: '数据记录', value: dataCount || 0, icon: TrendingUp, color: 'text-accent' },
+  const statCards = [
+    { label: '监控关键词', value: stats.keywordCount || 0, icon: Database, color: 'text-primary' },
+    { label: '活跃机会', value: stats.opportunityCount || 0, icon: Target, color: 'text-success' },
+    { label: '异常趋势', value: stats.anomalyCount || 0, icon: AlertTriangle, color: 'text-warning' },
+    { label: '数据记录', value: stats.dataCount || 0, icon: TrendingUp, color: 'text-accent' },
   ]
 
   return (
     <div className="space-y-6">
-      {/* 页面标题 */}
       <div>
         <h1 className="text-2xl font-bold">市场趋势仪表板</h1>
         <p className="text-sm text-zinc-500 mt-1">实时监控 Google Trends 数据和市场机会</p>
@@ -75,7 +41,7 @@ export default async function DashboardPage() {
 
       {/* 统计卡片 */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {stats.map((stat) => (
+        {statCards.map((stat) => (
           <div key={stat.label} className="bg-surface border border-border rounded-xl p-5 animate-fade-in">
             <div className="flex items-center justify-between mb-3">
               <stat.icon className={`w-5 h-5 ${stat.color}`} />
@@ -100,7 +66,7 @@ export default async function DashboardPage() {
           </div>
           <div className="space-y-3">
             {opportunities && opportunities.length > 0 ? (
-              opportunities.map((opp) => (
+              opportunities.map((opp: any) => (
                 <div key={opp.id} className="flex items-start justify-between p-3 rounded-lg bg-zinc-800/30 border border-zinc-700/30 hover:border-zinc-600/50 transition-colors">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
@@ -111,7 +77,7 @@ export default async function DashboardPage() {
                     </div>
                     <p className="text-sm font-medium truncate">{opp.title}</p>
                     <p className="text-xs text-zinc-500 mt-0.5">
-                      {opp.keywords?.keyword} · {opp.regions?.region_name || '全球'}
+                      {opp.keyword} · {opp.region_name || '全球'}
                     </p>
                   </div>
                   <div className="text-right ml-3">
@@ -143,15 +109,13 @@ export default async function DashboardPage() {
           </div>
           <div className="space-y-2">
             {analysis && analysis.length > 0 ? (
-              analysis.map((item, idx) => (
+              analysis.map((item: any, idx: number) => (
                 <div key={item.id} className="flex items-center gap-3 p-3 rounded-lg bg-zinc-800/30 hover:bg-zinc-800/50 transition-colors">
                   <span className="text-xs text-zinc-600 w-5 text-center">{idx + 1}</span>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">
-                      {item.keywords?.keyword || 'N/A'}
-                    </p>
+                    <p className="text-sm font-medium truncate">{item.keyword || 'N/A'}</p>
                     <p className="text-xs text-zinc-500">
-                      {item.regions?.region_name || '全球'} · 当前 {item.current_score}
+                      {item.region_name || '全球'} · 当前 {item.current_score}
                     </p>
                   </div>
                   <div className="flex items-center gap-3">
@@ -178,7 +142,7 @@ export default async function DashboardPage() {
         <div className="bg-surface border border-border rounded-xl p-5">
           <h2 className="text-lg font-semibold mb-4">最近采集记录</h2>
           <div className="space-y-2">
-            {logs.map((log) => (
+            {logs.map((log: any) => (
               <div key={log.id} className="flex items-center justify-between text-sm py-2 border-b border-zinc-800/50 last:border-0">
                 <div className="flex items-center gap-3">
                   <span className={`w-2 h-2 rounded-full ${log.status === 'success' ? 'bg-success' : log.status === 'failed' ? 'bg-danger' : 'bg-warning'}`} />

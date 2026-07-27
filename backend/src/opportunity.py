@@ -18,13 +18,7 @@ class OpportunityDetector:
         self.db = Database()
 
     def detect_all(self) -> List[Dict]:
-        """
-        从最近的分析结果中检测市场机会
-
-        Returns:
-            新发现的机会列表
-        """
-        # 获取最近7天的分析结果
+        """从最近的分析结果中检测市场机会"""
         recent = self.db.get_recent_analysis(days=7)
 
         if not recent:
@@ -41,7 +35,6 @@ class OpportunityDetector:
                     opportunities.append(opp)
                     logger.info(f"发现机会: {opp['title']} (评分: {opp['score']})")
                 except Exception as e:
-                    # 可能是重复机会，忽略
                     logger.debug(f"机会已存在或插入失败: {e}")
 
         logger.info(f"机会检测完成: 新发现 {len(opportunities)} 个机会")
@@ -57,18 +50,13 @@ class OpportunityDetector:
         current_score = analysis.get("current_score", 0)
         volatility = analysis.get("volatility", 0)
 
-        # 低于阈值不记录
         if score < Config.OPPORTUNITY_THRESHOLD:
             return None
 
-        # 关键词和地区信息
-        keyword_info = analysis.get("keywords", {})
-        region_info = analysis.get("regions", {})
-        keyword_text = keyword_info.get("keyword", "unknown") if isinstance(keyword_info, dict) else str(keyword_info)
-        region_code = region_info.get("region_code", "") if isinstance(region_info, dict) else str(region_info)
-        region_name = region_info.get("region_name", "Global") if isinstance(region_info, dict) else "Global"
+        # JOIN 后的关键词和地区信息是扁平结构
+        keyword_text = analysis.get("keyword", "unknown")
+        region_name = analysis.get("region_name", "Global")
 
-        # 确定机会类型
         opp_type = None
         title = ""
         description = ""
@@ -82,7 +70,6 @@ class OpportunityDetector:
                 f"变化率: {change_pct:+.1f}%, "
                 f"机会评分: {score:.1f}"
             )
-
         elif is_anomaly and change_pct > 50:
             opp_type = "emerging"
             title = f"[新兴趋势] {keyword_text} - {region_name}"
@@ -92,7 +79,6 @@ class OpportunityDetector:
                 f"异常分数: {analysis.get('anomaly_score', 0):.2f}, "
                 f"可能是新兴市场趋势"
             )
-
         elif volatility > 0.4 and score >= 65:
             opp_type = "seasonal"
             title = f"[季节性机会] {keyword_text} - {region_name}"
@@ -102,7 +88,6 @@ class OpportunityDetector:
                 f"机会评分: {score:.1f}, "
                 f"适合把握时机进入"
             )
-
         elif score >= 80 and volatility < 0.2:
             opp_type = "market_gap"
             title = f"[市场空白] {keyword_text} - {region_name}"
@@ -116,7 +101,6 @@ class OpportunityDetector:
         if not opp_type:
             return None
 
-        # 市场规模估算
         if current_score >= 80:
             market_size = "massive"
         elif current_score >= 60:
@@ -126,7 +110,6 @@ class OpportunityDetector:
         else:
             market_size = "small"
 
-        # 竞争程度评估
         if volatility >= 0.5:
             competition = "high"
         elif volatility >= 0.2:

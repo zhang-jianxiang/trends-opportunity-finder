@@ -1,54 +1,15 @@
-import { supabase } from '@/lib/supabase'
 import { getTrendColor, getTrendIcon, getPotentialColor, getPotentialLabel, formatScore } from '@/lib/utils'
 import { BarChart3, TrendingUp, AlertTriangle } from 'lucide-react'
 import { TrendLineChart, DirectionBarChart } from '@/components/charts'
 
-async function getTrendsData() {
+async function getTrendsData(): Promise<any> {
   try {
-    // 获取最新分析结果
-    const { data: analysis } = await supabase
-      .from('trend_analysis')
-      .select('*, keywords(keyword, category), regions(region_code, region_name)')
-      .order('analysis_date', { ascending: false })
-      .order('opportunity_score', { ascending: false })
-      .limit(20)
-
-    // 获取异常趋势
-    const { data: anomalies } = await supabase
-      .from('trend_analysis')
-      .select('*, keywords(keyword), regions(region_code, region_name)')
-      .eq('is_anomaly', true)
-      .order('anomaly_score', { ascending: false })
-      .limit(5)
-
-    // 获取趋势历史数据（用于图表）
-    const chartData: { name: string; data: { date: string; score: number }[] }[] = []
-    
-    if (analysis && analysis.length > 0) {
-      const topKeywords = analysis.slice(0, 5)
-      for (const item of topKeywords) {
-        const { data: history } = await supabase
-          .from('trends_data')
-          .select('date, score')
-          .eq('keyword_id', item.keyword_id)
-          .eq('region_id', item.region_id)
-          .order('date', { ascending: true })
-          .limit(30)
-
-        if (history && history.length > 0) {
-          const kwName = item.keywords?.keyword || 'N/A'
-          const regName = item.regions?.region_code || 'Global'
-          chartData.push({
-            name: `${kwName} (${regName})`,
-            data: history.map((h: { date: string; score: number }) => ({ date: h.date, score: h.score }))
-          })
-        }
-      }
-    }
-
-    return { analysis, anomalies, chartData }
-  } catch (error) {
-    console.error('获取趋势数据失败:', error)
+    const res = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/trends`, {
+      cache: 'no-store'
+    })
+    if (!res.ok) throw new Error('Failed to fetch')
+    return await res.json()
+  } catch {
     return { analysis: [], anomalies: [], chartData: [] }
   }
 }
@@ -57,31 +18,32 @@ export default async function TrendsPage() {
   const { analysis, anomalies, chartData } = await getTrendsData()
 
   // 准备图表数据
-  const allDates = chartData.length > 0
-    ? [...new Set(chartData.flatMap(s => s.data.map(d => d.date)))].sort()
+  const rawDates: string[] = chartData.length > 0
+    ? (chartData as any[]).flatMap((s: any) =>
+        (s.data as any[]).map((d: any) => String(d.date))
+      )
     : []
+  const allDates: string[] = [...new Set(rawDates)].sort()
 
   const mergedChartData = allDates.map(date => {
     const point: Record<string, string | number> = { date }
     for (const series of chartData) {
-      const item = series.data.find(d => d.date === date)
+      const item = series.data.find((d: any) => d.date === date)
       point[series.name] = item ? item.score : 0
     }
     return point
   })
 
-  // 图表系列配置
   const colors = ['#6366f1', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444']
-  const seriesConfig = chartData.map((s, idx) => ({
+  const seriesConfig = chartData.map((s: any, idx: number) => ({
     name: s.name,
     color: colors[idx % colors.length]
   }))
 
-  // 趋势方向分布
   const directionStats = {
-    up: analysis?.filter(a => a.trend_direction === 'up').length || 0,
-    down: analysis?.filter(a => a.trend_direction === 'down').length || 0,
-    stable: analysis?.filter(a => a.trend_direction === 'stable').length || 0,
+    up: analysis?.filter((a: any) => a.trend_direction === 'up').length || 0,
+    down: analysis?.filter((a: any) => a.trend_direction === 'down').length || 0,
+    stable: analysis?.filter((a: any) => a.trend_direction === 'stable').length || 0,
   }
 
   const directionChartData = [
@@ -99,7 +61,6 @@ export default async function TrendsPage() {
 
       {/* 图表区域 */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* 趋势折线图 */}
         <div className="lg:col-span-2 bg-surface border border-border rounded-xl p-5">
           <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
             <TrendingUp className="w-4 h-4 text-primary" />
@@ -108,7 +69,6 @@ export default async function TrendsPage() {
           <TrendLineChart data={mergedChartData} series={seriesConfig} />
         </div>
 
-        {/* 趋势方向分布 */}
         <div className="bg-surface border border-border rounded-xl p-5">
           <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
             <BarChart3 className="w-4 h-4 text-accent" />
@@ -127,14 +87,14 @@ export default async function TrendsPage() {
             <span className="text-xs text-zinc-500 font-normal">({anomalies.length} 个异常)</span>
           </h2>
           <div className="space-y-2">
-            {anomalies.map((item) => (
+            {anomalies.map((item: any) => (
               <div key={item.id} className="flex items-center justify-between p-3 rounded-lg bg-warning/5 border border-warning/20">
                 <div className="flex items-center gap-3">
                   <span className="text-warning text-lg">⚠</span>
                   <div>
-                    <p className="text-sm font-medium">{item.keywords?.keyword || 'N/A'}</p>
+                    <p className="text-sm font-medium">{item.keyword || 'N/A'}</p>
                     <p className="text-xs text-zinc-500">
-                      {item.regions?.region_name || '全球'} · 异常分数: {formatScore(item.anomaly_score)}
+                      {item.region_name || '全球'} · 异常分数: {formatScore(item.anomaly_score)}
                     </p>
                   </div>
                 </div>
@@ -168,10 +128,10 @@ export default async function TrendsPage() {
             </thead>
             <tbody>
               {analysis && analysis.length > 0 ? (
-                analysis.map((item) => (
+                analysis.map((item: any) => (
                   <tr key={item.id} className="border-b border-zinc-800/50 hover:bg-zinc-800/30">
-                    <td className="py-3 pr-4 font-medium">{item.keywords?.keyword || 'N/A'}</td>
-                    <td className="py-3 pr-4 text-zinc-400">{item.regions?.region_name || '全球'}</td>
+                    <td className="py-3 pr-4 font-medium">{item.keyword || 'N/A'}</td>
+                    <td className="py-3 pr-4 text-zinc-400">{item.region_name || '全球'}</td>
                     <td className="py-3 pr-4 text-right">{item.current_score}</td>
                     <td className="py-3 pr-4 text-right text-zinc-400">{formatScore(item.avg_score_7d)}</td>
                     <td className={`py-3 pr-4 text-right font-medium ${getTrendColor(item.trend_direction)}`}>

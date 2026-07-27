@@ -7,16 +7,14 @@
 #
 # 前提条件:
 #   在 GitHub 仓库 Settings > Secrets and variables > Actions 中添加:
-#   - SUPABASE_URL:  Supabase 项目 URL
-#   - SUPABASE_KEY:  Supabase anon key
+#   - DATABASE_URL:  Neon PostgreSQL 连接字符串
 
 name: Daily Trends Collection
 
 on:
   schedule:
-    # UTC 18:00 = 北京时间次日 02:00
+    # UTC 18:00 = 北京时间 02:00
     - cron: '0 18 * * *'
-  # 支持手动触发
   workflow_dispatch:
 
 jobs:
@@ -25,11 +23,9 @@ jobs:
     timeout-minutes: 30
 
     steps:
-      # 1. 获取代码
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # 2. 安装 Python
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
@@ -37,17 +33,14 @@ jobs:
           cache: 'pip'
           cache-dependency-path: backend/requirements.txt
 
-      # 3. 安装依赖
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r backend/requirements.txt
 
-      # 4. 执行每日任务（采集 + 分析 + 机会检测）
       - name: Run daily pipeline
         env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
           TRENDS_KEYWORDS: ${{ secrets.TRENDS_KEYWORDS }}
           TRENDS_REGIONS: ${{ secrets.TRENDS_REGIONS }}
         run: |
@@ -55,7 +48,6 @@ jobs:
           mkdir -p logs
           python run_daily.py
 
-      # 5. 上传日志（方便排查问题）
       - name: Upload logs
         if: always()
         uses: actions/upload-artifact@v4

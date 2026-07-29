@@ -41,8 +41,9 @@ jobs:
       - name: Run daily pipeline
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          TRENDS_KEYWORDS: ${{ secrets.TRENDS_KEYWORDS }}
-          TRENDS_REGIONS: ${{ secrets.TRENDS_REGIONS }}
+          TRENDS_KEYWORDS: "artificial intelligence,machine learning,digital health,cryptocurrency,sustainable energy,remote work,electric vehicles,social media,online learning,fitness apps"
+          TRENDS_REGIONS: ",US,CN,GB,DE,JP,FR,CA,AU,IN,BR,KR"
+          TRENDS_TIMEFRAME: "today 3-m"
         run: |
           cd backend
           mkdir -p logs

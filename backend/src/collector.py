@@ -24,6 +24,7 @@ if 'method_whitelist' not in _sig.parameters and 'allowed_methods' in _sig.param
     Retry.__init__ = _patched_init
 
 from pytrends.request import TrendReq
+from requests.exceptions import RequestException
 
 from .config import Config
 from .database import Database
@@ -41,7 +42,7 @@ class TrendsCollector:
             hl='en-US',
             tz=360,
             timeout=(10, 25),
-            retries=3,
+            retries=2,
             backoff_factor=0.5
         )
 
@@ -75,37 +76,46 @@ class TrendsCollector:
             region_name = region if region else "Global"
             logger.info(f"--- Collecting region: {region_name} ---")
 
-            # Process keywords in batches (max 4 per batch, Google Trends limit)
-            batch_size = 4
-            for i in range(0, len(keywords), batch_size):
-                batch = keywords[i:i + batch_size]
+            # Process keywords one at a time to avoid 429 rate limiting
+            for keyword in keywords:
+                max_retries = 3
+                for attempt in range(max_retries):
+                    try:
+                        collected = self._collect_batch([keyword], region)
+                        stats["records_collected"] += collected
+                        stats["details"].append({
+                            "region": region_name,
+                            "keyword": keyword,
+                            "collected": collected,
+                            "status": "success"
+                        })
+                        logger.info(f"Done: {keyword} ({region_name}) -> {collected} records")
+                        break
 
-                try:
-                    collected = self._collect_batch(batch, region)
-                    stats["records_collected"] += collected
-                    stats["details"].append({
-                        "region": region_name,
-                        "keywords": batch,
-                        "collected": collected,
-                        "status": "success"
-                    })
-                    logger.info(f"Batch done: {batch} -> {collected} records")
+                    except Exception as e:
+                        if attempt < max_retries - 1:
+                            wait_time = (attempt + 1) * 30
+                            logger.warning(f"Retry {attempt + 1}/{max_retries} for '{keyword}' ({region_name}): {e}. Waiting {wait_time}s...")
+                            time.sleep(wait_time)
+                        else:
+                            stats["errors"] += 1
+                            stats["details"].append({
+                                "region": region_name,
+                                "keyword": keyword,
+                                "error": str(e),
+                                "status": "failed"
+                            })
+                            logger.error(f"Failed after {max_retries} retries: {keyword} ({region_name}) -> {e}")
 
-                except Exception as e:
-                    stats["errors"] += 1
-                    stats["details"].append({
-                        "region": region_name,
-                        "keywords": batch,
-                        "error": str(e),
-                        "status": "failed"
-                    })
-                    logger.error(f"Batch failed: {batch} -> {e}")
-
-                # Random delay to avoid IP ban
-                delay = random.uniform(2.0, 5.0)
+                # Delay between keywords to avoid 429
+                delay = random.uniform(5.0, 10.0)
                 time.sleep(delay)
 
-        logger.info(f"Collection complete: {stats['records_collected']} records, {stats['errors']} failed batches")
+            # Longer delay between regions
+            delay = random.uniform(10.0, 15.0)
+            time.sleep(delay)
+
+        logger.info(f"Collection complete: {stats['records_collected']} records, {stats['errors']} failed")
         return stats
 
     def _collect_batch(self, keywords: List[str], region: str) -> int:
@@ -125,6 +135,9 @@ class TrendsCollector:
         try:
             interest_df = self.pytrends.interest_over_time()
             records_count += self._save_interest_data(interest_df, keywords, region)
+        except RequestException as e:
+            logger.warning(f"Failed to get interest over time: {e}")
+            raise
         except Exception as e:
             logger.warning(f"Failed to get interest over time: {e}")
 
@@ -132,6 +145,9 @@ class TrendsCollector:
         try:
             related = self.pytrends.related_queries()
             records_count += self._save_related_queries(related, keywords, region)
+        except RequestException as e:
+            logger.warning(f"Failed to get related queries: {e}")
+            raise
         except Exception as e:
             logger.warning(f"Failed to get related queries: {e}")
 

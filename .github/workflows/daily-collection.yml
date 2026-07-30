@@ -1,19 +1,19 @@
-# Google Trends 姣忔棩鑷姩閲囬泦涓庡垎鏋?
-# GitHub Actions 瀹氭椂宸ヤ綔娴?
+# Google Trends 每日自动采集与分析
+# GitHub Actions 定时工作流
 #
-# 瑙﹀彂鏂瑰紡:
-#   1. 姣忓ぉ鍖椾含鏃堕棿 02:00 鑷姩鎵ц (UTC 18:00)
-#   2. 鏀寔鎵嬪姩瑙﹀彂
+# 触发方式:
+#   1. 每天北京时间 02:00 自动执行 (UTC 18:00)
+#   2. 支持手动触发
 #
-# 鍓嶆彁鏉′欢:
-#   鍦?GitHub 浠撳簱 Settings > Secrets and variables > Actions 涓坊鍔?
-#   - DATABASE_URL:  Neon PostgreSQL 杩炴帴瀛楃涓?
+# 前提条件:
+#   在 GitHub 仓库 Settings > Secrets and variables > Actions 中添加:
+#   - DATABASE_URL:  Neon PostgreSQL 连接字符串
 
 name: Daily Trends Collection
 
 on:
   schedule:
-    # UTC 18:00 = 鍖椾含鏃堕棿 02:00
+    # UTC 18:00 = 北京时间 02:00
     - cron: '0 18 * * *'
   workflow_dispatch:
 
@@ -41,8 +41,8 @@ jobs:
       - name: Run daily pipeline
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          TRENDS_KEYWORDS: "artificial intelligence,machine learning,cryptocurrency,electric vehicles,online learning"
-          TRENDS_REGIONS: ",US,GB"
+          TRENDS_KEYWORDS: "artificial intelligence,machine learning"
+          TRENDS_REGIONS: ""
           TRENDS_TIMEFRAME: "today 3-m"
         run: |
           cd backend

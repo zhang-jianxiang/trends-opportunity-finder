@@ -11,9 +11,17 @@ import pandas as pd
 from loguru import logger
 
 # Fix urllib3 compatibility (pytrends incompatible with urllib3 2.x)
+# pytrends passes method_whitelist= to Retry, but urllib3 2.x renamed it to allowed_methods
 from urllib3.util.retry import Retry
-if not hasattr(Retry, 'DEFAULT_METHOD_WHITELIST'):
-    Retry.DEFAULT_METHOD_WHITELIST = Retry.DEFAULT_ALLOWED_METHODS
+import inspect
+_sig = inspect.signature(Retry.__init__)
+if 'method_whitelist' not in _sig.parameters and 'allowed_methods' in _sig.parameters:
+    _orig_init = Retry.__init__
+    def _patched_init(self, *args, **kwargs):
+        if 'method_whitelist' in kwargs:
+            kwargs['allowed_methods'] = kwargs.pop('method_whitelist')
+        _orig_init(self, *args, **kwargs)
+    Retry.__init__ = _patched_init
 
 from pytrends.request import TrendReq
 

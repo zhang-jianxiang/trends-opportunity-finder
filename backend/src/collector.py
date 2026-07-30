@@ -1,6 +1,6 @@
 """
-Google Trends 数据采集模块
-使用 pytrends �?Google Trends 获取数据并存�?Supabase
+Google Trends Data Collection Module
+Uses pytrends to fetch data from Google Trends and store in database
 """
 
 import time
@@ -8,27 +8,27 @@ import random
 from datetime import datetime, date
 from typing import List, Dict, Optional
 import pandas as pd
+from loguru import logger
 
-# Fix urllib3 compatibility
+# Fix urllib3 compatibility (pytrends incompatible with urllib3 2.x)
 from urllib3.util.retry import Retry
 if not hasattr(Retry, 'DEFAULT_METHOD_WHITELIST'):
     Retry.DEFAULT_METHOD_WHITELIST = Retry.DEFAULT_ALLOWED_METHODS
 
 from pytrends.request import TrendReq
-from loguru import logger
 
 from .config import Config
 from .database import Database
 
 
 class TrendsCollector:
-    """Google Trends 数据采集�?""
+    """Google Trends data collector"""
 
     def __init__(self):
         self.db = Database()
         self.timeframe = Config.TIMEFRAME
 
-        # 初始�?pytrends 客户�?
+        # Initialize pytrends client
         self.pytrends = TrendReq(
             hl='en-US',
             tz=360,
@@ -39,14 +39,14 @@ class TrendsCollector:
 
     def collect_all(self, keywords: List[str] = None, regions: List[str] = None) -> Dict:
         """
-        采集所有关键词和地区的趋势数据
+        Collect trend data for all keywords and regions.
 
         Args:
-            keywords: 关键词列表，为空则使用配置中的默认�?
-            regions: 地区列表，为空则使用配置中的默认�?
+            keywords: keyword list, uses config default if None
+            regions: region list, uses config default if None
 
         Returns:
-            采集结果统计
+            Collection result statistics
         """
         if keywords is None:
             keywords = Config.KEYWORDS
@@ -61,13 +61,13 @@ class TrendsCollector:
             "details": []
         }
 
-        logger.info(f"开始采�? {len(keywords)} 个关键词, {len(regions)} 个地�?)
+        logger.info(f"Start collecting: {len(keywords)} keywords, {len(regions)} regions")
 
         for region in regions:
             region_name = region if region else "Global"
-            logger.info(f"--- 采集地区: {region_name} ---")
+            logger.info(f"--- Collecting region: {region_name} ---")
 
-            # 分批处理关键词（每批最�?个，Google Trends限制�?
+            # Process keywords in batches (max 4 per batch, Google Trends limit)
             batch_size = 4
             for i in range(0, len(keywords), batch_size):
                 batch = keywords[i:i + batch_size]
@@ -81,7 +81,7 @@ class TrendsCollector:
                         "collected": collected,
                         "status": "success"
                     })
-                    logger.info(f"批次完成: {batch} -> {collected} 条记�?)
+                    logger.info(f"Batch done: {batch} -> {collected} records")
 
                 except Exception as e:
                     stats["errors"] += 1
@@ -91,18 +91,18 @@ class TrendsCollector:
                         "error": str(e),
                         "status": "failed"
                     })
-                    logger.error(f"批次失败: {batch} -> {e}")
+                    logger.error(f"Batch failed: {batch} -> {e}")
 
-                # 随机延迟，避免被 Google �?IP
+                # Random delay to avoid IP ban
                 delay = random.uniform(2.0, 5.0)
                 time.sleep(delay)
 
-        logger.info(f"采集完成: 成功 {stats['records_collected']} �? 失败 {stats['errors']} 批次")
+        logger.info(f"Collection complete: {stats['records_collected']} records, {stats['errors']} failed batches")
         return stats
 
     def _collect_batch(self, keywords: List[str], region: str) -> int:
-        """采集一批关键词的数�?""
-        # 构建 payload
+        """Collect data for a batch of keywords"""
+        # Build payload
         self.pytrends.build_payload(
             kw_list=keywords,
             cat=0,
@@ -113,31 +113,31 @@ class TrendsCollector:
 
         records_count = 0
 
-        # 1. 获取兴趣趋势数据
+        # 1. Get interest over time data
         try:
             interest_df = self.pytrends.interest_over_time()
             records_count += self._save_interest_data(interest_df, keywords, region)
         except Exception as e:
-            logger.warning(f"获取兴趣趋势失败: {e}")
+            logger.warning(f"Failed to get interest over time: {e}")
 
-        # 2. 获取相关查询
+        # 2. Get related queries
         try:
             related = self.pytrends.related_queries()
             records_count += self._save_related_queries(related, keywords, region)
         except Exception as e:
-            logger.warning(f"获取相关查询失败: {e}")
+            logger.warning(f"Failed to get related queries: {e}")
 
         return records_count
 
     def _save_interest_data(self, df: pd.DataFrame, keywords: List[str], region: str) -> int:
-        """保存兴趣趋势数据到数据库"""
+        """Save interest over time data to database"""
         if df.empty:
             return 0
 
         count = 0
         region_id = self.db.get_region_id(region)
         if not region_id:
-            logger.warning(f"地区 {region} 不在数据库中，跳�?)
+            logger.warning(f"Region {region} not found in database, skipping")
             return 0
 
         for keyword in keywords:
@@ -164,7 +164,7 @@ class TrendsCollector:
         return count
 
     def _save_related_queries(self, related: Dict, keywords: List[str], region: str) -> int:
-        """保存相关查询数据到数据库"""
+        """Save related queries data to database"""
         count = 0
         region_id = self.db.get_region_id(region)
         if not region_id:
@@ -204,16 +204,16 @@ class TrendsCollector:
 
     def collect_single_keyword(self, keyword: str, region: str = "") -> Dict:
         """
-        采集单个关键词的数据（用于测试或手动添加�?
+        Collect data for a single keyword (for testing or manual addition).
 
         Args:
-            keyword: 关键�?
-            region: 地区代码
+            keyword: keyword string
+            region: region code
 
         Returns:
-            采集结果
+            Collection result
         """
-        logger.info(f"采集单个关键�? {keyword} ({region or 'Global'})")
+        logger.info(f"Collecting single keyword: {keyword} ({region or 'Global'})")
         result = self._collect_batch([keyword], region)
         return {
             "keyword": keyword,
